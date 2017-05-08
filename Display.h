@@ -4,7 +4,11 @@
 #define GLFW_INCLUDE_VULKAN
 #include <GLFW/glfw3.h>
 
+#define GLM_FORCE_RADIANS
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#include <chrono>
 
 #include <stdexcept>
 #include <iostream>
@@ -15,6 +19,12 @@
 #include <algorithm>
 #include <fstream>
 #include <array>
+
+struct UniformBufferObject {
+  glm::mat4 model;
+  glm::mat4 view;
+  glm::mat4 proj;
+};
 
 struct Vertex {
   glm::vec2 pos;
@@ -46,11 +56,16 @@ struct Vertex {
   }
 };
 
-const std::vector<Vertex> vertices = {
+static std::vector<Vertex> vertices = {
   {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
     {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
     {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
+    
+    {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{1.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{1.5f, 1.5f}, {0.0f, 0.0f, 1.0f}},
+    {{0.5f, 1.5f}, {1.0f, 1.0f, 1.0f}}
 };
 
 const std::vector<uint16_t> indices = {
@@ -112,6 +127,10 @@ class Display {
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     
+    void createDescriptorSet();
+    void createDescriptorPool();
+    void createUniformBuffer();
+    void createDescriptorSetLayout();
     void recreateSwapChain();
     void copyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size);
     void createBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer &buffer, VkDeviceMemory &bufferMemory);
@@ -136,11 +155,19 @@ class Display {
     void initWindow();
     void initVulkan();
 
+    void updateUniformBuffer();
     void drawFrame();
     void mainLoop();
     
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     
+    VkDescriptorSet descriptorSet;
+    VkDescriptorPool descriptorPool;
+    VkBuffer uniformStagingBuffer;
+    VkDeviceMemory uniformStagingBufferMemory;
+    VkBuffer uniformBuffer;
+    VkDeviceMemory uniformBufferMemory;
+    VkDescriptorSetLayout descriptorSetLayout;
     VkDeviceMemory indexBufferMemory;
     VkBuffer indexBuffer;
     VkDeviceMemory vertexBufferMemory;
@@ -169,6 +196,16 @@ class Display {
     const uint32_t WIDTH = 800;
     const uint32_t HEIGHT = 600;
     GLFWwindow* window;
+    
+    float x = 0.5f;
+    float y = 0.5f;
+    //Square
+    std::vector<Vertex>  square = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+};
     
     //VDeleter<VkInstance> instance{vkDestroyInstance};
 };

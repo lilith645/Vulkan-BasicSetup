@@ -1,5 +1,46 @@
 #include "./Display.h"
 
+void Display::updateUniformBuffer() {
+  static auto startTime = std::chrono::high_resolution_clock::now();
+  
+  auto currentTime = std::chrono::high_resolution_clock::now();
+  float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.f;
+   y+= 0.00001*0;
+   std::vector<Vertex>  square = {
+     {{x-0.5f, y-0.5f}, {1.0f, 0.0f, 0.0f}},
+     {{x+0.5f, y-0.5f}, {0.0f, 1.0f, 0.0f}},
+     {{x+0.5f, y+0.5f}, {0.0f, 0.0f, 1.0f}},
+     {{x-0.5f, y+0.5f}, {1.0f, 1.0f, 1.0f}}
+   };
+  
+  VkDeviceSize bufferSize = sizeof(square[0])*square.size();
+  
+  VkBuffer stagingBuffer;
+  VkDeviceMemory stagingBufferMemory;
+  
+  createBuffer(bufferSize, VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+  
+  void* data;
+  vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
+  memcpy(data, square.data(), (size_t)bufferSize);
+  vkUnmapMemory(device, stagingBufferMemory);
+  
+  copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+  createCommandBuffers();
+  
+  UniformBufferObject ubo = {};
+  ubo.model = glm::rotate(glm::mat4(), time*glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
+  ubo.proj[1][1] *= -1;
+  
+  vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
+  memcpy(data, &ubo, sizeof(ubo));
+  vkUnmapMemory(device, uniformStagingBufferMemory);
+  
+  copyBuffer(uniformStagingBuffer, uniformBuffer, sizeof(ubo));
+}
+
 void Display::drawFrame() {
   uint32_t imageIndex;
   VkResult result = vkAcquireNextImageKHR(device, swapChain, std::numeric_limits<uint64_t>::max(), imageAvailableSemaphore, VK_NULL_HANDLE, &imageIndex);
@@ -55,6 +96,8 @@ void Display::drawFrame() {
 void Display::mainLoop() {
   while(!glfwWindowShouldClose(window)) {
     glfwPollEvents();
+    
+    updateUniformBuffer();
     drawFrame();
   }
   
@@ -119,6 +162,7 @@ void Display::createCommandBuffers() {
     
     vkCmdBindVertexBuffers(commandBuffers[i], 0, 1, vertexBuffers, offsets);
     vkCmdBindIndexBuffer(commandBuffers[i], indexBuffer, 0, VK_INDEX_TYPE_UINT16);
+    vkCmdBindDescriptorSets(commandBuffers[i], VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, 0, 1, &descriptorSet, 0, nullptr);
     
     //vkCmdDraw(commandBuffers[i], vertices.size(), 1, 0, 0);
     vkCmdDrawIndexed(commandBuffers[i], indices.size(), 1, 0, 0, 0);
@@ -234,7 +278,7 @@ void Display::createGraphicsPipeline() {
   rasterizer.polygonMode = VK_POLYGON_MODE_FILL;
   rasterizer.lineWidth = 1.0f;
   rasterizer.cullMode = VK_CULL_MODE_BACK_BIT;
-  rasterizer.frontFace = VK_FRONT_FACE_CLOCKWISE;
+  rasterizer.frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE;
   rasterizer.depthBiasEnable = VK_FALSE;
   rasterizer.depthBiasConstantFactor = 0.0f;
   rasterizer.depthBiasClamp = 0.0f;
@@ -275,10 +319,12 @@ void Display::createGraphicsPipeline() {
   colorBlending.blendConstants[2] = 0.0f;
   colorBlending.blendConstants[3] = 0.0f;
   
+  VkDescriptorSetLayout setLayouts[] = {descriptorSetLayout};
+  
   VkPipelineLayoutCreateInfo pipelineLayoutInfo = {};
   pipelineLayoutInfo.sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO;
-  pipelineLayoutInfo.setLayoutCount = 0;
-  pipelineLayoutInfo.pSetLayouts = nullptr;
+  pipelineLayoutInfo.setLayoutCount = 1;
+  pipelineLayoutInfo.pSetLayouts = setLayouts;
   pipelineLayoutInfo.pushConstantRangeCount = 0;
   pipelineLayoutInfo.pPushConstantRanges = 0;
   
@@ -570,15 +616,18 @@ bool checkDeviceExtensionSupport(VkPhysicalDevice device) {
   uint32_t extensionCount;
   vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
   
+  std::cout << "\n" << extensionCount << " extensions supported" << std::endl;
+  
   std::vector<VkExtensionProperties> availableExtensions(extensionCount);
   vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
   
   std::set<std::string> requireExtensions(deviceExtensions.begin(), deviceExtensions.end());
   
   for (const auto& extension: availableExtensions) {
+    std::cout << "Extension: "<< extension.extensionName << std::endl;
     requireExtensions.erase(extension.extensionName);
   }
-  
+  std::cout << std::endl;
   return requireExtensions.empty();
 }
 
@@ -624,6 +673,7 @@ bool Display::isDeviceSuitable(VkPhysicalDevice device) {
 
 void Display::pickPhysicalDevice() {
   physicalDevice = VK_NULL_HANDLE;
+  VkPhysicalDeviceProperties props;
   
   uint32_t deviceCount = 0;
   vkEnumeratePhysicalDevices(instance, &deviceCount, nullptr);
@@ -634,12 +684,22 @@ void Display::pickPhysicalDevice() {
   std::vector<VkPhysicalDevice> devices(deviceCount);
   vkEnumeratePhysicalDevices(instance, &deviceCount, devices.data());
   std::cout << "Number of usable GPUs: " << deviceCount << std::endl;
+  int i = 0;
+  for (const auto& device: devices) {    
+    vkGetPhysicalDeviceProperties(device, &props);
+    std::cout << "GPU id: " << i << " (" << props.deviceName << ")" << std::endl;
+    i++;
+  }
+  std::cout << std::endl;
   for (const auto& device: devices) {
     if(isDeviceSuitable(device)) {
+      vkGetPhysicalDeviceProperties(device, &props);
+      std::cout << "Using " << props.deviceName << " GPU" << std::endl;
       physicalDevice = device;
       break;
     }
   }
+  std::cout << std::endl;
   
   if(physicalDevice == VK_NULL_HANDLE) {
     throw std::runtime_error("Failed to find suitable GPU!");
@@ -678,6 +738,12 @@ void Display::createInstance() {
   if(vkCreateInstance(&createInfo, nullptr, &instance) != VK_SUCCESS) {
     throw std::runtime_error("failed to create instance!");
   }
+  
+  uint32_t vulkan_major, vulkan_minor, vulkan_patch;
+  vulkan_major = VK_VERSION_MAJOR(VK_API_VERSION_1_0);
+  vulkan_minor = VK_VERSION_MINOR(VK_API_VERSION_1_0);
+  vulkan_patch = VK_VERSION_PATCH(VK_HEADER_VERSION);
+  printf("\nVulkan API Version: %d.%d.%d\n\n", vulkan_major, vulkan_minor, vulkan_patch);
 }
 
 uint32_t Display::findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) {
@@ -772,7 +838,7 @@ void Display::createIndexBuffer() {
 }
 
 void Display::createVertexBuffer() {
-  VkDeviceSize bufferSize = sizeof(vertices[0])*vertices.size();
+  VkDeviceSize bufferSize = sizeof(square[0])*square.size();
   
   VkBuffer stagingBuffer;
   VkDeviceMemory stagingBufferMemory;
@@ -781,12 +847,86 @@ void Display::createVertexBuffer() {
   
   void* data;
   vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data);
-  memcpy(data, vertices.data(), (size_t)bufferSize);
+  memcpy(data, square.data(), (size_t)bufferSize);
   vkUnmapMemory(device, stagingBufferMemory);
   
   createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer, vertexBufferMemory);
   
   copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
+}
+
+void Display::createUniformBuffer() {
+  VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+  
+  createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformStagingBuffer, uniformStagingBufferMemory);
+  createBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, uniformBuffer, uniformBufferMemory);
+}
+
+void Display::createDescriptorSetLayout() {
+  VkDescriptorSetLayoutBinding uboLayoutBinding = {};
+  uboLayoutBinding.binding = 0;
+  uboLayoutBinding.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  uboLayoutBinding.descriptorCount = 1;
+  
+  uboLayoutBinding.stageFlags = VK_SHADER_STAGE_VERTEX_BIT;
+  uboLayoutBinding.pImmutableSamplers = nullptr;
+  
+  VkDescriptorSetLayoutCreateInfo layoutInfo = {};
+  layoutInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO;
+  layoutInfo.bindingCount = 1;
+  layoutInfo.pBindings = &uboLayoutBinding;
+  
+  if(vkCreateDescriptorSetLayout(device, &layoutInfo, nullptr, &descriptorSetLayout) != VK_SUCCESS) {
+    throw std::runtime_error("failed to create descriptor set layout!");
+  }
+}
+
+void Display::createDescriptorSet() {
+  VkDescriptorSetLayout layouts[] = {descriptorSetLayout};
+  VkDescriptorSetAllocateInfo allocInfo = {};
+  allocInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO;
+  allocInfo.descriptorPool = descriptorPool;
+  allocInfo.descriptorSetCount = 1;
+  allocInfo.pSetLayouts = layouts;
+  
+  if(vkAllocateDescriptorSets(device, &allocInfo, &descriptorSet) != VK_SUCCESS) {
+    throw std::runtime_error("failed to allocate descriptor set!");
+  }
+  
+  VkDescriptorBufferInfo bufferInfo = {};
+  bufferInfo.buffer = uniformBuffer;
+  bufferInfo.offset = 0;
+  bufferInfo.range = sizeof(UniformBufferObject);
+  
+  VkWriteDescriptorSet descriptorWrite = {};
+  descriptorWrite.sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET;
+  descriptorWrite.dstSet = descriptorSet;
+  descriptorWrite.dstBinding = 0;
+  descriptorWrite.dstArrayElement = 0;
+  
+  descriptorWrite.descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  descriptorWrite.descriptorCount = 1;
+  descriptorWrite.pBufferInfo = &bufferInfo;
+  descriptorWrite.pImageInfo = nullptr;
+  descriptorWrite.pTexelBufferView = nullptr;
+  
+  vkUpdateDescriptorSets(device, 1, &descriptorWrite, 0, nullptr);
+}
+
+void Display::createDescriptorPool() {
+  VkDescriptorPoolSize poolSize = {};
+  poolSize.type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER;
+  poolSize.descriptorCount = 1;
+  
+  VkDescriptorPoolCreateInfo poolInfo = {};
+  poolInfo.sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO;
+  poolInfo.poolSizeCount = 1;
+  poolInfo.pPoolSizes = &poolSize;
+  poolInfo.maxSets = 1;
+  
+  if(vkCreateDescriptorPool(device, &poolInfo, nullptr, &descriptorPool) != VK_SUCCESS) {
+    throw std::runtime_error("failed to create descriptor pool!");
+  }
 }
 
 void Display::recreateSwapChain() {
@@ -808,11 +948,15 @@ void Display::initVulkan() {
   createSwapChain();
   createImageViews();
   createRenderPass();
+  createDescriptorSetLayout();
   createGraphicsPipeline();
   createFramebuffers();
   createCommandPool();
   createVertexBuffer();
   createIndexBuffer();
+  createUniformBuffer();
+  createDescriptorPool();
+  createDescriptorSet();
   createCommandBuffers();
   createSemaphores();
 }
