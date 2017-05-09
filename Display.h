@@ -155,7 +155,7 @@ class Display {
     void initWindow();
     void initVulkan();
 
-    void updateUniformBuffer();
+    void updateUniformBuffer(float delta);
     void drawFrame();
     void mainLoop();
     
@@ -197,14 +197,17 @@ class Display {
     const uint32_t HEIGHT = 600;
     GLFWwindow* window;
     
-    float x = 0.5f;
-    float y = 0.5f;
+    float x = 0.0f;
+    float y = 0.0f;
+    float width = 100.0f;
+    float height = 100.0f;
+
     //Square
     std::vector<Vertex>  square = {
-    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}}
+    {{-100.0f, -100.0f}, {1.0f, 0.0f, 0.0f}},
+    {{100.0f, -100.0f}, {0.0f, 1.0f, 0.0f}},
+    {{100.0f, 100.0f}, {0.0f, 0.0f, 1.0f}},
+    {{-100.0f, 100.0f}, {1.0f, 1.0f, 1.0f}}
 };
     
     //VDeleter<VkInstance> instance{vkDestroyInstance};

@@ -1,16 +1,28 @@
 #include "./Display.h"
 
-void Display::updateUniformBuffer() {
-  static auto startTime = std::chrono::high_resolution_clock::now();
-  
-  auto currentTime = std::chrono::high_resolution_clock::now();
-  float time = std::chrono::duration_cast<std::chrono::milliseconds>(currentTime - startTime).count() / 1000.f;
-   y+= 0.00001*0;
-   std::vector<Vertex>  square = {
-     {{x-0.5f, y-0.5f}, {1.0f, 0.0f, 0.0f}},
-     {{x+0.5f, y-0.5f}, {0.0f, 1.0f, 0.0f}},
-     {{x+0.5f, y+0.5f}, {0.0f, 0.0f, 1.0f}},
-     {{x-0.5f, y+0.5f}, {1.0f, 1.0f, 1.0f}}
+void Display::updateUniformBuffer(float delta) {  
+  //x=0;
+  //y=0;
+  x+= 4*delta;
+  y+=4*delta;
+  if (x < 0+100) {
+    x = 0+100;
+  }
+  if (x > 1000-100) {
+    x = 1000-100;
+   }
+  if (y < 0+100) {
+    y = 0+100;
+  }
+  if (y > 1000-100) {
+    y = 1000-100;
+   }
+   
+  /* std::vector<Vertex>  square = {
+     {{x-width, y-height}, {1.0f, 0.0f, 0.0f}},
+     {{x+width, y-height}, {0.0f, 1.0f, 0.0f}},
+     {{x+width, y+height}, {0.0f, 0.0f, 1.0f}},
+     {{x-width, y+height}, {1.0f, 1.0f, 1.0f}}
    };
   
   VkDeviceSize bufferSize = sizeof(square[0])*square.size();
@@ -26,14 +38,29 @@ void Display::updateUniformBuffer() {
   vkUnmapMemory(device, stagingBufferMemory);
   
   copyBuffer(stagingBuffer, vertexBuffer, bufferSize);
-  createCommandBuffers();
+  createCommandBuffers();*/
+  //x=swapChainExtent.width/2;
+  //y=swapChainExtent.height/2;
+  float ratio = swapChainExtent.width / (float) swapChainExtent.height;
   
   UniformBufferObject ubo = {};
-  ubo.model = glm::rotate(glm::mat4(), time*glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-  ubo.view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f));
-  ubo.proj = glm::perspective(glm::radians(45.0f), swapChainExtent.width / (float) swapChainExtent.height, 0.1f, 10.0f);
-  ubo.proj[1][1] *= -1;
   
+  float fov_y = 45.0f;
+  float z = 500.0f / tan(glm::radians(fov_y/(2)));
+  
+  ubo.view = glm::lookAt(glm::vec3(500.0f, 500.0f, z), 
+                         glm::vec3(500.0f, 500.0f, 0.0f), 
+                         glm::vec3(0.0f, 1.0f, 0.0f));  
+                         
+  ubo.proj = glm::perspective(glm::radians(fov_y), ratio, 0.1f, 10000.0f); //Stuff is square
+  //ubo.proj = glm::perspective(glm::radians(fov_y), 1.0f, 0.1f, 10000.0f); //Touches edges but stuff is rectangle
+  
+  ubo.model = glm::translate(glm::mat4(), glm::vec3(x, y, 0.0f) );// *
+              //glm::rotate(glm::mat4(), delta*glm::radians(45.0f), glm::vec3(0.0f, 0.0f, 1.0f));
+  ubo.proj[1][1] *= -1;
+
+  
+  void *data;
   vkMapMemory(device, uniformStagingBufferMemory, 0, sizeof(ubo), 0, &data);
   memcpy(data, &ubo, sizeof(ubo));
   vkUnmapMemory(device, uniformStagingBufferMemory);
@@ -94,10 +121,17 @@ void Display::drawFrame() {
 }
 
 void Display::mainLoop() {
+  double lastTime = glfwGetTime();
+  
   while(!glfwWindowShouldClose(window)) {
     glfwPollEvents();
     
-    updateUniformBuffer();
+    double currentTime = glfwGetTime();
+   // printf("Time: %f", currentTime);
+    float deltaTime = float(currentTime - lastTime)*50;
+    lastTime = glfwGetTime();
+    
+    updateUniformBuffer(deltaTime);
     drawFrame();
   }
   
