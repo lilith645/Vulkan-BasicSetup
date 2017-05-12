@@ -1,6 +1,6 @@
 VULKAN_SDK_PATH = /home/akuma/VulkanSDK/1.0.46.0/x86_64
 
-CFLAGS = -std=c++11 -I$(VULKAN_SDK_PATH)/include
+CFLAGS = -std=c++11 -I$(VULKAN_SDK_PATH)/include -I/home/akuma/Git/Vulkan-BasicSetup/stb
 LDFLAGS = -L$(VULKAN_SDK_PATH)/lib `pkg-config --static --libs glfw3` -lvulkan
 VulkanCPP = main.cpp Display.cpp
 

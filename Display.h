@@ -29,6 +29,7 @@ struct UniformBufferObject {
 struct Vertex {
   glm::vec2 pos;
   glm::vec3 color;
+  glm::vec2 texCoord;
   
   static VkVertexInputBindingDescription getBindingDescription() {
     VkVertexInputBindingDescription bindingDescription = {};
@@ -39,8 +40,8 @@ struct Vertex {
     return bindingDescription;
   }
   
-  static std::array<VkVertexInputAttributeDescription, 2> getAttributeDescriptions() {
-    std::array<VkVertexInputAttributeDescription, 2> attributeDescriptions = {};
+  static std::array<VkVertexInputAttributeDescription, 3> getAttributeDescriptions() {
+    std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions = {};
     
     attributeDescriptions[0].binding = 0;
     attributeDescriptions[0].location = 0;
@@ -52,21 +53,21 @@ struct Vertex {
     attributeDescriptions[1].format = VK_FORMAT_R32G32B32_SFLOAT;
     attributeDescriptions[1].offset = offsetof(Vertex, color);
     
+    attributeDescriptions[2].binding = 0;
+    attributeDescriptions[2].location = 2;
+    attributeDescriptions[2].format = VK_FORMAT_R32G32_SFLOAT;
+    attributeDescriptions[2].offset = offsetof(Vertex, texCoord);
+    
     return attributeDescriptions;
   }
 };
-
-static std::vector<Vertex> vertices = {
-  {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}},
-    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}},
-    
-    {{0.5f, 0.5f}, {1.0f, 0.0f, 0.0f}},
-    {{1.5f, 0.5f}, {0.0f, 1.0f, 0.0f}},
-    {{1.5f, 1.5f}, {0.0f, 0.0f, 1.0f}},
-    {{0.5f, 1.5f}, {1.0f, 1.0f, 1.0f}}
-};
+/*
+const std::vector<Vertex> vertices = {
+    {{-0.5f, -0.5f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{0.5f, -0.5f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{0.5f, 0.5f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-0.5f, 0.5f}, {1.0f, 1.0f, 1.0f}, {0.0f, 1.0f}}
+};*/
 
 const std::vector<uint16_t> indices = {
     0, 1, 2, 2, 3, 0
@@ -127,6 +128,16 @@ class Display {
     QueueFamilyIndices findQueueFamilies(VkPhysicalDevice device);
     SwapChainSupportDetails querySwapChainSupport(VkPhysicalDevice device);
     
+    VkCommandBuffer beginSingleTimeCommands();
+    void endSingleTimeCommands(VkCommandBuffer commandBuffer);
+    
+    void createTextureSampler();
+    void createImageView(VkImage image, VkFormat format, VkImageView &imageView);
+    void createTextureImageView();
+    void copyImage(VkImage srcImage, VkImage dstImage, uint32_t width, uint32_t height);
+    void transitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout);
+    void createImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage &image, VkDeviceMemory &imageMemory);
+    void createTextureImage();
     void createDescriptorSet();
     void createDescriptorPool();
     void createUniformBuffer();
@@ -161,6 +172,12 @@ class Display {
     
     uint32_t findMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties);
     
+    VkSampler textureSampler;
+    VkImageView textureImageView;
+    VkImage textureImage;
+    VkDeviceMemory textureImageMemory;
+    VkImage stagingImage;
+    VkDeviceMemory stagingImageMemory;
     VkDescriptorSet descriptorSet;
     VkDescriptorPool descriptorPool;
     VkBuffer uniformStagingBuffer;
@@ -197,17 +214,18 @@ class Display {
     const uint32_t HEIGHT = 600;
     GLFWwindow* window;
     
-    float x = 0.0f;
-    float y = 0.0f;
-    float width = 100.0f;
-    float height = 100.0f;
+    float x = 500.0f;
+    float y = 500.0f;
+    float rotation = 0.0f;
+    float width = 500.0f;
+    float height = 500.0f;
 
     //Square
     std::vector<Vertex>  square = {
-    {{-100.0f, -100.0f}, {1.0f, 0.0f, 0.0f}},
-    {{100.0f, -100.0f}, {0.0f, 1.0f, 0.0f}},
-    {{100.0f, 100.0f}, {0.0f, 0.0f, 1.0f}},
-    {{-100.0f, 100.0f}, {1.0f, 1.0f, 1.0f}}
+    {{-250.0f, -250.0f}, {1.0f, 0.0f, 0.0f}, {0.0f, 0.0f}},
+    {{250.0f, -250.0f}, {0.0f, 1.0f, 0.0f}, {1.0f, 0.0f}},
+    {{250.0f, 250.0f}, {0.0f, 0.0f, 1.0f}, {1.0f, 1.0f}},
+    {{-250.0f, 250.0f}, {0.0f, 0.0f, 1.0f}, {0.0f, 1.0f}}
 };
     
     //VDeleter<VkInstance> instance{vkDestroyInstance};
